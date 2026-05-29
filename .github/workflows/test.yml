@@ -2,32 +2,39 @@ name: Pipeline CI - Unified Data Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
+    # Injeta credenciais mockadas globais para blindar o awswrangler/boto3 no CI
+    env:
+      AWS_ACCESS_KEY_ID: testing
+      AWS_SECRET_ACCESS_KEY: testing
+      AWS_DEFAULT_REGION: us-east-1
+
     steps:
       - name: Checkout do Código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Configurar Python 3.10
-        uses: actions/setup-python@v4
+      - name: Configurar Python 3.10 com Cache de Dependências
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip' # Ativa o cache nativo: se o requirements não mudar, o restore leva segundos
 
-      - name: Instalar Dependências
+      - name: Instalar Dependências Determinísticas
         run: |
           python -m pip install --upgrade pip
-          # Garante que as dependências (incluindo pytest) sejam instaladas
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # Caso não esteja no requirements, instalamos aqui por segurança
-          pip install pytest pandas faker awswrangler 
+          if [ -f requirements.txt ]; then 
+            pip install -r requirements.txt
+          else 
+            echo "ERRO: O arquivo requirements.txt é obrigatório para garantir o determinismo do pipeline." && exit 1
+          fi
 
       - name: Rodar Testes Unitários (Pytest)
         run: |
-          # O segredo: 'python -m' adiciona automaticamente o diretório atual ao sys.path
-          python -m pytest tests/test_pipeline.py
+          python -m pytest tests/test_pipeline.py --strict-markers
